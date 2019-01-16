@@ -1,7 +1,7 @@
 {
-  "name": "xstate",
-  "version": "4.2.4",
-  "description": "Simple JavaScript Finite State Machines and Statecharts",
+  "name": "xstate-ext",
+  "version": "4.2.4-ext",
+  "description": "Simple JavaScript Finite State Machines, This is a fork of the original lib.",
   "main": "lib/index.js",
   "module": "es/index.js",
   "types": "lib/index.d.ts",
@@ -43,14 +43,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/davidkpiano/xstate.git"
+    "url": "git+https://github.com/sangallimarco/xstate.git"
   },
   "author": "David Khourshid <davidkpiano@gmail.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/davidkpiano/xstate/issues"
+    "url": "https://github.com/sangallimarco/xstate/issues"
   },
-  "homepage": "https://github.com/davidkpiano/xstate#readme",
+  "homepage": "https://github.com/sangallimarco/xstate#readme",
   "devDependencies": {
     "@types/chai": "^4.1.7",
     "@types/core-js": "^2.5.0",
