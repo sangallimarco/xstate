@@ -1,6 +1,6 @@
 {
   "name": "xstate-ext",
-  "version": "1.0.1",
+  "version": "4.2.4-ext",
   "description": "Simple JavaScript Finite State Machines, This is a fork of the original lib.",
   "main": "lib/index.js",
   "module": "es/index.js",
