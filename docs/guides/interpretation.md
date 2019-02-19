@@ -22,8 +22,7 @@ Since version 4.0, XState provides an (optional) interpreter that you can use to
 - And more!
 
 ```js
-import { Machine } from 'xstate';
-import { interpret } from 'xstate/lib/interpreter';
+import { Machine, interpret } from 'xstate';
 
 const machine = Machine(/* machine config */);
 
@@ -149,3 +148,17 @@ listen(state => {
 
 send('SOME_EVENT');
 ```
+
+## Notes
+
+- The `interpret` function is exported directly from `xstate` since 4.3.0 (i.e., `import { interpret } from 'xstate'`). For prior versions, it is imported from `'xstate/lib/interpreter'`.
+- Most interpreter methods can be chained:
+
+```js
+const service = interpret(machine)
+  .onTransition(state => console.log(state))
+  .onDone(() => console.log('done'))
+  .start(); // returns started service
+```
+
+- Do not call `service.send(...)` directly from actions. This impedes testing, visualization, and analysis. Instead, [use `invoke`](./communication.md).

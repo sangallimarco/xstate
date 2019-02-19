@@ -67,7 +67,7 @@ export function getEventType<TEvent extends EventObject = EventObject>(
     );
   }
 }
-export function getActionType(action: Action<any>): ActionType {
+export function getActionType(action: Action<any, any>): ActionType {
   try {
     return typeof action === 'string' || typeof action === 'number'
       ? `${action}`
@@ -323,4 +323,22 @@ export function isBuiltInEvent(eventType: EventType): boolean {
   }
 
   return false;
+}
+
+export function partition<T, A extends T, B extends T>(
+  items: T[],
+  predicate: (item: T) => item is A
+): [A[], B[]] {
+  return items.reduce(
+    (acc, item) => {
+      if (predicate(item)) {
+        acc[0].push(item);
+      } else {
+        acc[1].push(item as B);
+      }
+
+      return acc;
+    },
+    [[], []] as [A[], B[]]
+  );
 }

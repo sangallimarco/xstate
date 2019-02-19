@@ -20,7 +20,7 @@ Functional, stateless JavaScript [finite state machines](https://en.wikipedia.or
 
 Adheres to the [SCXML specification](https://www.w3.org/TR/scxml/).
 
-[**Version 3.x to 4 Migration Guide**](./migration.md)
+[**Version 3.x to 4 Migration Guide**](https://github.com/davidkpiano/xstate/blob/master/migration.md)
 
 ## Super quick start
 
@@ -29,8 +29,7 @@ npm i xstate -S
 ```
 
 ```js
-import { Machine } from 'xstate';
-import { interpret } from 'xstate/lib/interpreter'; // or use your own interpreter!
+import { Machine, interpret } from 'xstate'; // or use your own interpreter!
 
 // Stateless machine definition
 // machine.transition(...) is a pure function used by the interpreter.

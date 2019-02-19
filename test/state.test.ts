@@ -124,6 +124,28 @@ describe('State', () => {
       const changedState = machine.transition(twoState, 'UNKNOWN_EVENT');
       assert.isFalse(changedState.changed, 'not changed - unknown event');
     });
+
+    it('should report entering a final state as changed', () => {
+      const finalMachine = Machine({
+        id: 'final',
+        initial: 'one',
+        states: {
+          one: {
+            on: {
+              DONE: 'two'
+            }
+          },
+
+          two: {
+            type: 'final'
+          }
+        }
+      });
+
+      const twoState = finalMachine.transition('one', 'DONE');
+
+      assert.isTrue(twoState.changed);
+    });
   });
 
   describe('.nextEvents', () => {
@@ -146,6 +168,18 @@ describe('State', () => {
         machine.transition(machine.initialState, 'TO_THREE').nextEvents,
         ['P31', 'P32', 'THREE_EVENT', 'MACHINE_EVENT']
       );
+    });
+
+    xit('returns events when transitioned from StateValue', () => {
+      const A = machine.transition(machine.initialState, 'TO_THREE');
+      const B = machine.transition(A.value, 'TO_THREE');
+
+      assert.deepEqual(B.nextEvents, [
+        'P31',
+        'P32',
+        'THREE_EVENT',
+        'MACHINE_EVENT'
+      ]);
     });
   });
 

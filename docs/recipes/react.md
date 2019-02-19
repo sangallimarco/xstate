@@ -12,8 +12,7 @@ The most straightforward way of using XState with React is through local compone
 
 ```jsx
 import React from 'react';
-import { Machine } from 'xstate';
-import { interpret } from 'xstate/lib/interpreter';
+import { Machine, interpret } from 'xstate';
 
 const toggleMachine = Machine({
   id: 'toggle',
@@ -33,8 +32,9 @@ class Toggle extends React.Component {
     current: toggleMachine.initialState
   };
 
-  service = interpret(toggleMachine)
-    .onTransition(current => this.setState({ current }));
+  service = interpret(toggleMachine).onTransition(current =>
+    this.setState({ current })
+  );
 
   componentDidMount() {
     this.service.start();
@@ -52,18 +52,18 @@ class Toggle extends React.Component {
       <button onClick={() => send('TOGGLE')}>
         {current.matches('inactive') ? 'Off' : 'On'}
       </button>
-    )
+    );
   }
 }
 ```
 
 ## Hooks
 
-Using [React hooks](https://reactjs.org/hooks) makes it easier to use state machines with functional components. You can either use a community solution like [`use-machine` by Carlos Galarza](https://github.com/carloslfu/use-machine/) or implement your own hook to interpret and use XState machines:
+Using [React hooks](https://reactjs.org/hooks) makes it easier to use state machines with function components. You can either use a community solution like [`use-machine` by Carlos Galarza](https://github.com/carloslfu/use-machine/) or implement your own hook to interpret and use XState machines:
 
 ```js
 import { useState, useMemo, useEffect } from 'react';
-import { interpret } from 'xstate/lib/interpreter';
+import { interpret } from 'xstate';
 
 export function useMachine(machine) {
   // Keep track of the current machine state
@@ -75,7 +75,9 @@ export function useMachine(machine) {
       interpret(machine)
         .onTransition(state => {
           // Update the current machine state when a transition occurs
-          setCurrent(state);
+          if (state.changed) {
+            setCurrent(state);
+          }
         })
         .start(),
     []

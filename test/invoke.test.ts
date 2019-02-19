@@ -1,55 +1,13 @@
-import { Machine, actions } from '../src/index';
-import { interpret } from '../src/interpreter';
-import { assign, sendParent, send } from '../src/actions';
+import {
+  Machine,
+  interpret,
+  assign,
+  sendParent,
+  send,
+  EventObject
+} from '../src/index';
 import { assert } from 'chai';
-
-const childMachine = Machine({
-  id: 'child',
-  initial: 'init',
-  states: {
-    init: {
-      onEntry: [actions.sendParent('INC'), actions.sendParent('INC')],
-      on: {
-        FORWARD_DEC: {
-          actions: [
-            actions.sendParent('DEC'),
-            actions.sendParent('DEC'),
-            actions.sendParent('DEC')
-          ]
-        }
-      }
-    }
-  }
-});
-
-const parentMachine = Machine(
-  {
-    id: 'parent',
-    context: { count: 0 },
-    initial: 'start',
-    states: {
-      start: {
-        invoke: {
-          src: 'child',
-          id: 'someService',
-          forward: true
-        },
-        on: {
-          INC: { actions: assign({ count: ctx => ctx.count + 1 }) },
-          DEC: { actions: assign({ count: ctx => ctx.count - 1 }) },
-          FORWARD_DEC: undefined,
-          STOP: 'stop'
-        }
-      },
-      stop: {}
-    }
-  },
-  {
-    services: {
-      child: childMachine
-    }
-  }
-);
+import { actionTypes, done as _done, doneInvoke } from '../src/actions';
 
 const user = { name: 'David' };
 
@@ -165,27 +123,123 @@ const intervalMachine = Machine({
 });
 
 describe('invoke', () => {
-  it('should start services (external machines)', () => {
-    const service = interpret(parentMachine).start();
-    // 1. The 'parent' machine will enter 'start' state
-    // 2. The 'child' service will be run with ID 'someService'
-    // 3. The 'child' machine will enter 'init' state
-    // 4. The 'onEntry' action will be executed, which sends 'INC' to 'parent' machine twice
-    // 5. The context will be updated to increment count to 2
+  it('should start services (external machines)', done => {
+    const childMachine = Machine({
+      id: 'child',
+      initial: 'init',
+      states: {
+        init: {
+          onEntry: [sendParent('INC'), sendParent('INC')]
+        }
+      }
+    });
 
-    assert.deepEqual(service.state.context, { count: 2 });
+    const someParentMachine = Machine(
+      {
+        id: 'parent',
+        context: { count: 0 },
+        initial: 'start',
+        states: {
+          start: {
+            invoke: {
+              src: 'child',
+              id: 'someService',
+              forward: true
+            },
+            on: {
+              INC: { actions: assign({ count: ctx => ctx.count + 1 }) },
+              '': {
+                target: 'stop',
+                cond: ctx => ctx.count === 2
+              }
+            }
+          },
+          stop: {
+            type: 'final'
+          }
+        }
+      },
+      {
+        services: {
+          child: childMachine
+        }
+      }
+    );
+
+    const service = interpret(someParentMachine)
+      .onDone(() => {
+        // 1. The 'parent' machine will enter 'start' state
+        // 2. The 'child' service will be run with ID 'someService'
+        // 3. The 'child' machine will enter 'init' state
+        // 4. The 'onEntry' action will be executed, which sends 'INC' to 'parent' machine twice
+        // 5. The context will be updated to increment count to 2
+
+        assert.deepEqual(service.state.context, { count: 2 });
+        done();
+      })
+      .start();
   });
 
   it('should forward events to services if forward: true', () => {
-    const service = interpret(parentMachine).start();
+    const childMachine = Machine({
+      id: 'child',
+      initial: 'init',
+      states: {
+        init: {
+          on: {
+            FORWARD_DEC: {
+              actions: [sendParent('DEC'), sendParent('DEC'), sendParent('DEC')]
+            }
+          }
+        }
+      }
+    });
+
+    const someParentMachine = Machine(
+      {
+        id: 'parent',
+        context: { count: 0 },
+        initial: 'start',
+        states: {
+          start: {
+            invoke: {
+              src: 'child',
+              id: 'someService',
+              forward: true
+            },
+            on: {
+              DEC: { actions: assign({ count: ctx => ctx.count - 1 }) },
+              FORWARD_DEC: undefined,
+              '': {
+                target: 'stop',
+                cond: ctx => ctx.count === -3
+              }
+            }
+          },
+          stop: {
+            type: 'final'
+          }
+        }
+      },
+      {
+        services: {
+          child: childMachine
+        }
+      }
+    );
+
+    const service = interpret(someParentMachine)
+      .onDone(() => {
+        // 1. The 'parent' machine will not do anything (inert transition)
+        // 2. The 'FORWARD_DEC' event will be forwarded to the 'child' machine (forward: true)
+        // 3. On the 'child' machine, the 'FORWARD_DEC' event sends the 'DEC' action to the 'parent' thrice
+        // 4. The context of the 'parent' machine will be updated from 2 to -1
+
+        assert.deepEqual(service.state.context, { count: -3 });
+      })
+      .start();
 
     service.send('FORWARD_DEC');
-    // 1. The 'parent' machine will not do anything (inert transition)
-    // 2. The 'FORWARD_DEC' event will be forwarded to the 'child' machine (forward: true)
-    // 3. On the 'child' machine, the 'FORWARD_DEC' event sends the 'DEC' action to the 'parent' thrice
-    // 4. The context of the 'parent' machine will be updated from 2 to -1
-
-    assert.deepEqual(service.state.context, { count: -1 });
   });
 
   it('should start services (explicit machine, invoke = config)', done => {
@@ -206,24 +260,62 @@ describe('invoke', () => {
       .send('GO_TO_WAITING_MACHINE');
   });
 
-  it('should use the service overwritten by withConfig', () => {
-    const service = interpret(
-      parentMachine.withConfig({
+  it('should use the service overwritten by withConfig', done => {
+    const childMachine = Machine({
+      id: 'child',
+      initial: 'init',
+      states: {
+        init: {}
+      }
+    });
+
+    const someParentMachine = Machine(
+      {
+        id: 'parent',
+        context: { count: 0 },
+        initial: 'start',
+        states: {
+          start: {
+            invoke: {
+              src: 'child',
+              id: 'someService',
+              forward: true
+            },
+            on: {
+              STOP: 'stop'
+            }
+          },
+          stop: {
+            type: 'final'
+          }
+        }
+      },
+      {
+        services: {
+          child: childMachine
+        }
+      }
+    );
+
+    interpret(
+      someParentMachine.withConfig({
         services: {
           child: Machine({
             id: 'child',
             initial: 'init',
             states: {
               init: {
-                onEntry: [actions.sendParent('STOP')]
+                onEntry: [sendParent('STOP')]
               }
             }
           })
         }
       })
-    ).start();
-
-    assert.deepEqual(service.state.value, 'stop');
+    )
+      .onDone(() => {
+        done();
+      })
+      .start();
   });
 
   describe('parent to child', () => {
@@ -377,6 +469,256 @@ describe('invoke', () => {
         .start();
     });
 
+    it('should be invoked with a promise factory and resolve through onDone for compound state nodes', done => {
+      const promiseMachine = Machine({
+        id: 'promise',
+        initial: 'parent',
+        states: {
+          parent: {
+            initial: 'pending',
+            states: {
+              pending: {
+                invoke: {
+                  src: () => Promise.resolve(),
+                  onDone: 'success'
+                }
+              },
+              success: {
+                type: 'final'
+              }
+            },
+            onDone: 'success'
+          },
+          success: {
+            type: 'final'
+          }
+        }
+      });
+
+      interpret(promiseMachine)
+        .onDone(() => done())
+        .start();
+    });
+
+    it('should be invoked with a promise service and resolve through onDone for compound state nodes', done => {
+      const promiseMachine = Machine(
+        {
+          id: 'promise',
+          initial: 'parent',
+          states: {
+            parent: {
+              initial: 'pending',
+              states: {
+                pending: {
+                  invoke: {
+                    src: 'somePromise',
+                    onDone: 'success'
+                  }
+                },
+                success: {
+                  type: 'final'
+                }
+              },
+              onDone: 'success'
+            },
+            success: {
+              type: 'final'
+            }
+          }
+        },
+        {
+          services: {
+            somePromise: () => Promise.resolve()
+          }
+        }
+      );
+
+      interpret(promiseMachine)
+        .onDone(() => done())
+        .start();
+    });
+
+    it('should assign the resolved data when invoked with a promise factory', done => {
+      const promiseMachine = Machine({
+        id: 'promise',
+        context: { count: 0 },
+        initial: 'pending',
+        states: {
+          pending: {
+            invoke: {
+              src: () => Promise.resolve({ count: 1 }),
+              onDone: {
+                target: 'success',
+                actions: assign({ count: (_, e) => e.data.count })
+              }
+            }
+          },
+          success: {
+            type: 'final'
+          }
+        }
+      });
+
+      const service = interpret(promiseMachine)
+        .onDone(() => {
+          assert.equal(service.state.context.count, 1);
+          done();
+        })
+        .start();
+    });
+
+    it('should assign the resolved data when invoked with a promise service', done => {
+      const promiseMachine = Machine(
+        {
+          id: 'promise',
+          context: { count: 0 },
+          initial: 'pending',
+          states: {
+            pending: {
+              invoke: {
+                src: 'somePromise',
+                onDone: {
+                  target: 'success',
+                  actions: assign({ count: (_, e) => e.data.count })
+                }
+              }
+            },
+            success: {
+              type: 'final'
+            }
+          }
+        },
+        {
+          services: {
+            somePromise: () => Promise.resolve({ count: 1 })
+          }
+        }
+      );
+
+      const service = interpret(promiseMachine)
+        .onDone(() => {
+          assert.equal(service.state.context.count, 1);
+          done();
+        })
+        .start();
+    });
+
+    it('should provide the resolved data when invoked with a promise factory', done => {
+      let count = 0;
+
+      const promiseMachine = Machine({
+        id: 'promise',
+        context: { count: 0 },
+        initial: 'pending',
+        states: {
+          pending: {
+            invoke: {
+              src: () => Promise.resolve({ count: 1 }),
+              onDone: {
+                target: 'success',
+                actions: (_, e) => {
+                  count = e.data.count;
+                }
+              }
+            }
+          },
+          success: {
+            type: 'final'
+          }
+        }
+      });
+
+      interpret(promiseMachine)
+        .onDone(() => {
+          assert.equal(count, 1);
+          done();
+        })
+        .start();
+    });
+
+    it('should provide the resolved data when invoked with a promise service', done => {
+      let count = 0;
+
+      const promiseMachine = Machine(
+        {
+          id: 'promise',
+          initial: 'pending',
+          states: {
+            pending: {
+              invoke: {
+                src: 'somePromise',
+                onDone: {
+                  target: 'success',
+                  actions: (_, e) => {
+                    count = e.data.count;
+                  }
+                }
+              }
+            },
+            success: {
+              type: 'final'
+            }
+          }
+        },
+        {
+          services: {
+            somePromise: () => Promise.resolve({ count: 1 })
+          }
+        }
+      );
+
+      interpret(promiseMachine)
+        .onDone(() => {
+          assert.equal(count, 1);
+          done();
+        })
+        .start();
+    });
+
+    it('should work with invocations defined in orthogonal state nodes', done => {
+      const pongMachine = Machine({
+        id: 'pong',
+        initial: 'active',
+        states: {
+          active: {
+            type: 'final',
+            data: { secret: 'pingpong' }
+          }
+        }
+      });
+
+      const pingMachine = Machine({
+        id: 'ping',
+        type: 'parallel',
+        states: {
+          one: {
+            initial: 'active',
+            states: {
+              active: {
+                invoke: {
+                  id: 'pong',
+                  src: pongMachine,
+                  onDone: {
+                    target: 'success',
+                    cond: (_, e) => e.data.secret === 'pingpong'
+                  }
+                }
+              },
+              success: {
+                type: 'final'
+              }
+            }
+          }
+        }
+      });
+
+      interpret(pingMachine)
+        .onDone(() => {
+          done();
+        })
+        .start();
+    });
+
     it('should be able to specify a Promise as a service', done => {
       const promiseMachine = Machine(
         {
@@ -516,6 +858,350 @@ describe('invoke', () => {
       interpret(pingPongMachine)
         .onDone(() => done())
         .start();
+    });
+
+    it('should call onError upon error (sync)', done => {
+      const errorMachine = Machine({
+        id: 'error',
+        initial: 'safe',
+        states: {
+          safe: {
+            invoke: {
+              src: () => () => {
+                throw new Error('test');
+              },
+              onError: {
+                target: 'failed',
+                cond: (_, e) => {
+                  return e.data instanceof Error && e.data.message === 'test';
+                }
+              }
+            }
+          },
+          failed: {
+            type: 'final'
+          }
+        }
+      });
+
+      interpret(errorMachine)
+        .onDone(() => done())
+        .start();
+    });
+
+    it('should call onError upon error (async)', done => {
+      const errorMachine = Machine({
+        id: 'asyncError',
+        initial: 'safe',
+        states: {
+          safe: {
+            invoke: {
+              src: () => async () => {
+                await true;
+                throw new Error('test');
+              },
+              onError: {
+                target: 'failed',
+                cond: (_, e) => {
+                  return e.data instanceof Error && e.data.message === 'test';
+                }
+              }
+            }
+          },
+          failed: {
+            type: 'final'
+          }
+        }
+      });
+
+      interpret(errorMachine)
+        .onDone(() => done())
+        .start();
+    });
+
+    it('should be able to be stringified', () => {
+      const waitingState = fetcherMachine.transition(
+        fetcherMachine.initialState,
+        'GO_TO_WAITING'
+      );
+
+      assert.doesNotThrow(() => {
+        JSON.stringify(waitingState);
+      });
+
+      assert.isString(waitingState.actions[0].activity!.src);
+    });
+
+    xit('should throw error if unhandled (sync)', done => {
+      const errorMachine = Machine({
+        id: 'asyncError',
+        initial: 'safe',
+        states: {
+          safe: {
+            invoke: {
+              src: () => () => {
+                throw new Error('test');
+              }
+            }
+          },
+          failed: {
+            type: 'final'
+          }
+        }
+      });
+
+      interpret(errorMachine)
+        .onDone(() => done())
+        .start();
+    });
+
+    xit('should throw error if unhandled (async)', done => {
+      const errorMachine = Machine({
+        id: 'asyncError',
+        initial: 'safe',
+        states: {
+          safe: {
+            invoke: {
+              src: () => async () => {
+                await true;
+                throw new Error('test');
+              }
+            }
+          },
+          failed: {
+            type: 'final'
+          }
+        }
+      });
+
+      interpret(errorMachine)
+        .onDone(() => done())
+        .start();
+    });
+
+    describe('sub invoke race condition', () => {
+      const anotherChildMachine = Machine({
+        id: 'child',
+        initial: 'start',
+        states: {
+          start: {
+            on: { STOP: 'end' }
+          },
+          end: {
+            type: 'final'
+          }
+        }
+      });
+
+      const anotherParentMachine = Machine({
+        id: 'parent',
+        initial: 'begin',
+        states: {
+          begin: {
+            invoke: {
+              src: anotherChildMachine,
+              id: 'invoked.child',
+              onDone: 'completed'
+            },
+            on: {
+              STOPCHILD: {
+                actions: send('STOP', { to: 'invoked.child' })
+              }
+            }
+          },
+          completed: {
+            type: 'final'
+          }
+        }
+      });
+
+      it('ends on the completed state', done => {
+        const events: EventObject[] = [];
+        const service = interpret(anotherParentMachine)
+          .onEvent(e => {
+            events.push(e);
+          })
+          .onDone(() => {
+            assert.deepEqual(events.map(e => e.type), [
+              actionTypes.init,
+              'STOPCHILD',
+              doneInvoke('invoked.child').type
+            ]);
+            assert.equal(service.state.value, 'completed');
+            done();
+          })
+          .start();
+
+        service.send('STOPCHILD');
+      });
+    });
+  });
+
+  describe('nested invoked machine', () => {
+    const pongMachine = Machine({
+      id: 'pong',
+      initial: 'active',
+      states: {
+        active: {
+          on: {
+            PING: {
+              // Sends 'PONG' event to parent machine
+              actions: sendParent('PONG')
+            }
+          }
+        }
+      }
+    });
+
+    // Parent machine
+    const pingMachine = Machine({
+      id: 'ping',
+      initial: 'innerMachine',
+      states: {
+        innerMachine: {
+          initial: 'active',
+          states: {
+            active: {
+              invoke: {
+                id: 'pong',
+                src: pongMachine
+              },
+              // Sends 'PING' event to child machine with ID 'pong'
+              onEntry: send('PING', { to: 'pong' }),
+              on: {
+                PONG: 'innerSuccess'
+              }
+            },
+            innerSuccess: {
+              type: 'final'
+            }
+          },
+          onDone: 'success'
+        },
+        success: { type: 'final' }
+      }
+    });
+
+    it('should create invocations from machines in nested states', done => {
+      interpret(pingMachine)
+        .onDone(() => done())
+        .start();
+    });
+  });
+
+  describe('multiple simultaneous services', () => {
+    // @ts-ignore
+    const multiple = Machine({
+      id: 'machine',
+      initial: 'one',
+
+      context: {},
+
+      on: {
+        ONE: {
+          actions: assign({
+            one: 'one'
+          })
+        },
+
+        TWO: {
+          actions: assign({
+            two: 'two'
+          }),
+          target: '.three'
+        }
+      },
+
+      states: {
+        one: {
+          initial: 'two',
+          states: {
+            two: {
+              invoke: [
+                {
+                  id: 'child',
+                  src: () => cb => cb('ONE')
+                },
+                {
+                  id: 'child2',
+                  src: () => cb => cb('TWO')
+                }
+              ]
+            }
+          }
+        },
+        three: {
+          type: 'final'
+        }
+      }
+    });
+
+    it('should start all services at once', done => {
+      const service = interpret(multiple).onDone(() => {
+        assert.deepEqual(service.state.context, { one: 'one', two: 'two' });
+        done();
+      });
+
+      service.start();
+    });
+
+    const parallel = Machine({
+      id: 'machine',
+      initial: 'one',
+
+      context: {},
+
+      on: {
+        ONE: {
+          actions: assign({
+            one: 'one'
+          })
+        },
+
+        TWO: {
+          actions: assign({
+            two: 'two'
+          }),
+          target: '.three'
+        }
+      },
+
+      states: {
+        one: {
+          initial: 'two',
+          states: {
+            two: {
+              type: 'parallel',
+              states: {
+                a: {
+                  invoke: {
+                    id: 'child',
+                    src: () => cb => cb('ONE')
+                  }
+                },
+                b: {
+                  invoke: {
+                    id: 'child2',
+                    src: () => cb => cb('TWO')
+                  }
+                }
+              }
+            }
+          }
+        },
+        three: {
+          type: 'final'
+        }
+      }
+    });
+
+    it('should run services in parallel', done => {
+      const service = interpret(parallel).onDone(() => {
+        assert.deepEqual(service.state.context, { one: 'one', two: 'two' });
+        done();
+      });
+
+      service.start();
     });
   });
 });

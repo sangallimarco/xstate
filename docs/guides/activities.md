@@ -138,7 +138,7 @@ redStopState.actions;
 And any stopped activities will be stopped only once:
 
 ```js
-const greenState = lightMachine.transition(redStopState, 'PED_STOP');
+const greenState = lightMachine.transition(redStopState, 'TIMER');
 
 green.activities;
 // No active activities
@@ -213,7 +213,7 @@ const toggleMachine = Machine(
 Using XState's [interpreter](./interpretation.md), every time an action occurs to start an activity, it will call that activity creator to start the activity, and use the returned "stopper" (if it is returned) to stop the activity:
 
 ```js
-import { interpret } from 'xstate/lib/interpreter';
+import { interpret } from 'xstate';
 
 // ... (previous code)
 

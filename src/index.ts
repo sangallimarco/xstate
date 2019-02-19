@@ -13,9 +13,10 @@ import {
   stop,
   assign,
   after,
-  done,
-  invoke
+  done
 } from './actions';
+import { interpret } from './interpreter';
+import { matchState } from './match';
 
 const actions = {
   raise,
@@ -27,10 +28,21 @@ const actions = {
   stop,
   assign,
   after,
-  done,
-  invoke
+  done
 };
 
-export { Machine, StateNode, State, matchesState, mapState, actions };
+export {
+  Machine,
+  StateNode,
+  State,
+  matchesState,
+  mapState,
+  actions,
+  assign,
+  send,
+  sendParent,
+  interpret,
+  matchState
+};
 
 export * from './types';

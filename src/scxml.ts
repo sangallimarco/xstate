@@ -180,9 +180,10 @@ function executableContent(elements: XMLElement[]) {
   return transition;
 }
 
-function mapActions<TContext extends object>(
-  elements: XMLElement[]
-): Array<ActionObject<TContext>> {
+function mapActions<
+  TContext extends object,
+  TEvent extends EventObject = EventObject
+>(elements: XMLElement[]): Array<ActionObject<TContext, TEvent>> {
   return elements.map(element => {
     switch (element.name) {
       case 'raise':
@@ -211,8 +212,8 @@ function mapActions<TContext extends object>(
           ? typeof delay === 'number'
             ? delay
             : /(\d+)ms/.test(delay)
-              ? +/(\d+)ms/.exec(delay)![1]
-              : 0
+            ? +/(\d+)ms/.exec(delay)![1]
+            : 0
           : 0;
         return actions.send(element.attributes!.event! as string, {
           delay: numberDelay
@@ -258,6 +259,12 @@ function toConfig(
         target: target ? `#${target}` : undefined
       };
     }
+    case 'final': {
+      return {
+        ...nodeJson.attributes,
+        type: 'final'
+      };
+    }
     default:
       break;
   }
@@ -267,6 +274,7 @@ function toConfig(
       element =>
         element.name === 'state' ||
         element.name === 'parallel' ||
+        element.name === 'final' ||
         element.name === 'history'
     );
 

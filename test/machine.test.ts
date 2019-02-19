@@ -1,7 +1,6 @@
 import { assert } from 'chai';
-import { Machine } from '../src/index';
+import { Machine, interpret } from '../src/index';
 import { State } from '../src/State';
-import { interpret } from '../src/interpreter';
 
 const pedestrianStates = {
   initial: 'walk',
@@ -175,6 +174,65 @@ describe('machine', () => {
       assert.deepEqual(differentMachine.initialState.context, {
         foo: 'different'
       });
+    });
+  });
+
+  describe('machine.resolveState()', () => {
+    const resolveMachine = Machine({
+      id: 'resolve',
+      initial: 'foo',
+      states: {
+        foo: {
+          initial: 'one',
+          states: {
+            one: {
+              type: 'parallel',
+              states: {
+                a: {
+                  initial: 'aa',
+                  states: { aa: {} }
+                },
+                b: {
+                  initial: 'bb',
+                  states: { bb: {} }
+                }
+              },
+              on: {
+                TO_TWO: 'two'
+              }
+            },
+            two: {
+              on: { TO_ONE: 'one' }
+            }
+          },
+          on: {
+            TO_BAR: 'bar'
+          }
+        },
+        bar: {
+          on: {
+            TO_FOO: 'foo'
+          }
+        }
+      }
+    });
+
+    it('should resolve the state value', () => {
+      const tempState = State.from('foo', undefined);
+
+      const resolvedState = resolveMachine.resolveState(tempState);
+
+      assert.deepEqual(resolvedState.value, {
+        foo: { one: { a: 'aa', b: 'bb' } }
+      });
+    });
+
+    it('should resolve the state tree (implicit via events)', () => {
+      const tempState = State.from('foo', undefined);
+
+      const resolvedState = resolveMachine.resolveState(tempState);
+
+      assert.deepEqual(resolvedState.nextEvents, ['TO_BAR']);
     });
   });
 });
